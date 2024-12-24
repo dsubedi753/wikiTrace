@@ -1,0 +1,295 @@
+// manifest.json
+{
+  "manifest_version": 3,
+  "name": "Wikipedia Navigation Visualizer",
+  "version": "1.0",
+  "description": "Tracks and visualizes your Wikipedia browsing history as a graph",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["*://*.wikipedia.org/*"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [{
+    "matches": ["*://*.wikipedia.org/*"],
+    "js": ["content.js"]
+  }],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
+
+// content.js
+function getWikipediaTitle() {
+  const titleElement = document.getElementById('firstHeading');
+  return titleElement ? titleElement.textContent.trim() : null;
+}
+
+function trackNavigation(fromTitle) {
+  const currentTitle = getWikipediaTitle();
+  if (currentTitle) {
+    chrome.runtime.sendMessage({
+      type: 'navigation',
+      from: fromTitle,
+      to: currentTitle,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a[href*="/wiki/"]');
+  if (link) {
+    const fromTitle = getWikipediaTitle();
+    sessionStorage.setItem('fromTitle', fromTitle);
+  }
+});
+
+window.addEventListener('load', () => {
+  const fromTitle = sessionStorage.getItem('fromTitle');
+  if (fromTitle) {
+    trackNavigation(fromTitle);
+    sessionStorage.removeItem('fromTitle');
+  }
+});
+
+// background.js
+let navigationHistory = [];
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'navigation') {
+    navigationHistory.push({
+      from: message.from,
+      to: message.to,
+      timestamp: message.timestamp
+    });
+    chrome.storage.local.set({ navigationHistory });
+  }
+});
+
+// popup.html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Wikipedia Navigation History</title>
+  <style>
+    body {
+      width: 800px;
+      height: 600px;
+      padding: 20px;
+      margin: 0;
+      background: #000000;
+      font-family: Arial, sans-serif;
+    }
+    #graph {
+      width: 100%;
+      height: 500px;
+      border: 1px solid #333;
+      border-radius: 4px;
+    }
+    .controls {
+      margin: 10px 0;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 8px 16px;
+      background: #333;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .node-box {
+      fill: #1a1a1a;
+      stroke: #4488ff;
+      stroke-width: 2;
+    }
+    .node-label {
+      fill: white;
+      font-size: 12px;
+    }
+    .link {
+      stroke: #4488ff;
+      stroke-width: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <button id="clearHistory">Clear History</button>
+    <button id="zoomIn">Zoom In</button>
+    <button id="zoomOut">Zoom Out</button>
+    <button id="resetView">Reset View</button>
+  </div>
+  <div id="graph">
+    <svg width="100%" height="100%"></svg>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
+
+// popup.js
+class GraphVisualizer {
+  constructor(svgElement) {
+    this.svg = svgElement;
+    this.scale = 1;
+    this.translateX = 0;
+    this.translateY = 0;
+    this.setupZoom();
+  }
+
+  setupZoom() {
+    let isDragging = false;
+    let startX, startY;
+
+    this.svg.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX - this.translateX;
+      startY = e.clientY - this.translateY;
+    });
+
+    this.svg.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        this.translateX = e.clientX - startX;
+        this.translateY = e.clientY - startY;
+        this.updateTransform();
+      }
+    });
+
+    this.svg.addEventListener('mouseup', () => isDragging = false);
+    this.svg.addEventListener('mouseleave', () => isDragging = false);
+  }
+
+  zoomIn() {
+    this.scale *= 1.2;
+    this.updateTransform();
+  }
+
+  zoomOut() {
+    this.scale *= 0.8;
+    this.updateTransform();
+  }
+
+  resetView() {
+    this.scale = 1;
+    this.translateX = 0;
+    this.translateY = 0;
+    this.updateTransform();
+  }
+
+  updateTransform() {
+    const container = this.svg.querySelector('g');
+    if (container) {
+      container.setAttribute('transform', 
+        `translate(${this.translateX},${this.translateY}) scale(${this.scale})`
+      );
+    }
+  }
+
+  render(history) {
+    this.svg.innerHTML = '';
+    
+    // Create container group
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    
+    // Create nodes and links from history
+    const nodes = new Map();
+    const links = [];
+    
+    history.forEach(entry => {
+      if (!nodes.has(entry.from)) {
+        nodes.set(entry.from, {
+          id: entry.from,
+          x: Math.random() * 600 + 100,
+          y: Math.random() * 400 + 100
+        });
+      }
+      if (!nodes.has(entry.to)) {
+        nodes.set(entry.to, {
+          id: entry.to,
+          x: Math.random() * 600 + 100,
+          y: Math.random() * 400 + 100
+        });
+      }
+      
+      links.push({
+        source: nodes.get(entry.from),
+        target: nodes.get(entry.to)
+      });
+    });
+
+    // Draw links
+    links.forEach(link => {
+      const linkElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      linkElement.setAttribute('x1', link.source.x);
+      linkElement.setAttribute('y1', link.source.y);
+      linkElement.setAttribute('x2', link.target.x);
+      linkElement.setAttribute('y2', link.target.y);
+      linkElement.setAttribute('class', 'link');
+      container.appendChild(linkElement);
+    });
+
+    // Draw nodes
+    nodes.forEach(node => {
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      
+      // Create rectangle
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', node.x - 80);
+      rect.setAttribute('y', node.y - 20);
+      rect.setAttribute('width', 160);
+      rect.setAttribute('height', 40);
+      rect.setAttribute('rx', 5);
+      rect.setAttribute('class', 'node-box');
+      group.appendChild(rect);
+      
+      // Create text
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', node.x);
+      text.setAttribute('y', node.y);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dominant-baseline', 'middle');
+      text.setAttribute('class', 'node-label');
+      
+      // Truncate text if needed
+      const title = node.id.length > 20 ? node.id.substring(0, 20) + '...' : node.id;
+      text.textContent = title;
+      
+      group.appendChild(text);
+      container.appendChild(group);
+    });
+
+    this.svg.appendChild(container);
+  }
+}
+
+// Initialize visualization
+document.addEventListener('DOMContentLoaded', function() {
+  const svg = document.querySelector('#graph svg');
+  const visualizer = new GraphVisualizer(svg);
+  
+  function updateGraph() {
+    chrome.storage.local.get(['navigationHistory'], function(result) {
+      const history = result.navigationHistory || [];
+      visualizer.render(history);
+    });
+  }
+  
+  document.getElementById('clearHistory').addEventListener('click', function() {
+    chrome.storage.local.set({ navigationHistory: [] }, updateGraph);
+  });
+  
+  document.getElementById('zoomIn').addEventListener('click', function() {
+    visualizer.zoomIn();
+  });
+  
+  document.getElementById('zoomOut').addEventListener('click', function() {
+    visualizer.zoomOut();
+  });
+  
+  document.getElementById('resetView').addEventListener('click', function() {
+    visualizer.resetView();
+  });
+  
+  updateGraph();
+});
