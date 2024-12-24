@@ -2,48 +2,8 @@
 <html>
 <head>
   <title>Wikipedia Navigation History</title>
-  <style>
-    body {
-      width: 800px;
-      height: 600px;
-      padding: 20px;
-      margin: 0;
-      background: #000000;
-      font-family: Arial, sans-serif;
-    }
-    #graph {
-      width: 100%;
-      height: 500px;
-      border: 1px solid #333;
-      border-radius: 4px;
-    }
-    .controls {
-      margin: 10px 0;
-      display: flex;
-      gap: 10px;
-    }
-    button {
-      padding: 8px 16px;
-      background: #333;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .node-box {
-      fill: #1a1a1a;
-      stroke: #4488ff;
-      stroke-width: 2;
-    }
-    .node-label {
-      fill: white;
-      font-size: 12px;
-    }
-    .link {
-      stroke: #4488ff;
-      stroke-width: 1.5;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 </head>
 <body>
   <div class="controls">

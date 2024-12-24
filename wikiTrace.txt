@@ -1,4 +1,3 @@
-// manifest.json
 {
   "manifest_version": 3,
   "name": "Wikipedia Navigation Visualizer",
@@ -15,104 +14,19 @@
   }],
   "background": {
     "service_worker": "background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' https://cdnjs.cloudflare.com; object-src 'self'"
   }
 }
-
-// content.js
-function getWikipediaTitle() {
-  const titleElement = document.getElementById('firstHeading');
-  return titleElement ? titleElement.textContent.trim() : null;
-}
-
-function trackNavigation(fromTitle) {
-  const currentTitle = getWikipediaTitle();
-  if (currentTitle) {
-    chrome.runtime.sendMessage({
-      type: 'navigation',
-      from: fromTitle,
-      to: currentTitle,
-      timestamp: new Date().toISOString()
-    });
-  }
-}
-
-document.addEventListener('click', (e) => {
-  const link = e.target.closest('a[href*="/wiki/"]');
-  if (link) {
-    const fromTitle = getWikipediaTitle();
-    sessionStorage.setItem('fromTitle', fromTitle);
-  }
-});
-
-window.addEventListener('load', () => {
-  const fromTitle = sessionStorage.getItem('fromTitle');
-  if (fromTitle) {
-    trackNavigation(fromTitle);
-    sessionStorage.removeItem('fromTitle');
-  }
-});
-
-// background.js
-let navigationHistory = [];
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'navigation') {
-    navigationHistory.push({
-      from: message.from,
-      to: message.to,
-      timestamp: message.timestamp
-    });
-    chrome.storage.local.set({ navigationHistory });
-  }
-});
 
 // popup.html
 <!DOCTYPE html>
 <html>
 <head>
   <title>Wikipedia Navigation History</title>
-  <style>
-    body {
-      width: 800px;
-      height: 600px;
-      padding: 20px;
-      margin: 0;
-      background: #000000;
-      font-family: Arial, sans-serif;
-    }
-    #graph {
-      width: 100%;
-      height: 500px;
-      border: 1px solid #333;
-      border-radius: 4px;
-    }
-    .controls {
-      margin: 10px 0;
-      display: flex;
-      gap: 10px;
-    }
-    button {
-      padding: 8px 16px;
-      background: #333;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .node-box {
-      fill: #1a1a1a;
-      stroke: #4488ff;
-      stroke-width: 2;
-    }
-    .node-label {
-      fill: white;
-      font-size: 12px;
-    }
-    .link {
-      stroke: #4488ff;
-      stroke-width: 1.5;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 </head>
 <body>
   <div class="controls">
@@ -128,9 +42,159 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 </body>
 </html>
 
+// styles.css
+body {
+  width: 800px;
+  height: 600px;
+  padding: 20px;
+  margin: 0;
+  background: #000000;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: white;
+}
+
+#graph {
+  width: 100%;
+  height: 500px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #000000;
+}
+
+.controls {
+  margin: 10px 0;
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  padding: 8px 16px;
+  background: #1a1a1a;
+  color: #ffffff;
+  border: 1px solid #333;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #2a2a2a;
+}
+
+.node-box {
+  fill: #1a1a1a;
+  stroke: #4488ff;
+  stroke-width: 2;
+}
+
+.node-label {
+  fill: white;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.link {
+  stroke: #4488ff;
+  stroke-width: 1.5;
+}
+
+// content.js
+function getWikipediaTitle() {
+  const titleElement = document.getElementById('firstHeading');
+  return titleElement ? titleElement.textContent.trim() : null;
+}
+
+function trackNavigation(fromTitle) {
+  const currentTitle = getWikipediaTitle();
+  console.log('Tracking navigation from', fromTitle, 'to', currentTitle);
+  
+  if (currentTitle) {
+    const navigation = {
+      from: fromTitle,
+      to: currentTitle,
+      timestamp: new Date().toISOString()
+    };
+    
+    chrome.storage.local.get(['navigationHistory'], function(result) {
+      const history = result.navigationHistory || [];
+      history.push(navigation);
+      chrome.storage.local.set({ navigationHistory: history });
+      console.log('Added navigation to history:', navigation);
+    });
+  }
+}
+
+// Capture all types of link activations
+document.addEventListener('click', handleLinkClick, true);
+document.addEventListener('mousedown', handleLinkClick, true);
+document.addEventListener('auxclick', handleLinkClick, true);  // Middle click
+
+function handleLinkClick(e) {
+  const link = e.target.closest('a[href*="/wiki/"]');
+  if (!link) return;
+
+  // Don't handle right clicks
+  if (e.button === 2) return;
+
+  const fromTitle = getWikipediaTitle();
+  const targetUrl = link.href;
+
+  // Notify background script about this navigation attempt
+  chrome.runtime.sendMessage({
+    type: 'linkClicked',
+    fromTitle: fromTitle,
+    targetUrl: targetUrl
+  });
+
+  console.log('Link clicked:', {fromTitle, targetUrl});
+}
+
+// Listen for navigation completion message from background script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'processNavigation') {
+    trackNavigation(message.fromTitle);
+  }
+  return true;
+});
+
+// background.js
+let pendingNavigations = new Map();
+
+// Listen for all navigation types
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'linkClicked') {
+    const fromTitle = message.fromTitle;
+    const targetUrl = message.targetUrl;
+    
+    // Store this navigation attempt
+    pendingNavigations.set(targetUrl, {
+      fromTitle: fromTitle,
+      timestamp: Date.now()
+    });
+    
+    console.log('Stored pending navigation:', {fromTitle, targetUrl});
+  }
+  return true;
+});
+
+// Listen for navigation completion
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url && tab.url.includes('wikipedia.org/wiki/')) {
+    const pending = pendingNavigations.get(tab.url);
+    if (pending && (Date.now() - pending.timestamp) < 10000) {
+      chrome.tabs.sendMessage(tabId, {
+        type: 'processNavigation',
+        fromTitle: pending.fromTitle
+      });
+      pendingNavigations.delete(tab.url);
+    }
+  }
+});
+
 // popup.js
 class GraphVisualizer {
   constructor(svgElement) {
+    console.log('Initializing GraphVisualizer');
     this.svg = svgElement;
     this.scale = 1;
     this.translateX = 0;
@@ -142,22 +206,27 @@ class GraphVisualizer {
     let isDragging = false;
     let startX, startY;
 
-    this.svg.addEventListener('mousedown', (e) => {
+    this.svg.addEventListener('mousedown', function(e) {
       isDragging = true;
       startX = e.clientX - this.translateX;
       startY = e.clientY - this.translateY;
-    });
+    }.bind(this));
 
-    this.svg.addEventListener('mousemove', (e) => {
+    this.svg.addEventListener('mousemove', function(e) {
       if (isDragging) {
         this.translateX = e.clientX - startX;
         this.translateY = e.clientY - startY;
         this.updateTransform();
       }
+    }.bind(this));
+
+    this.svg.addEventListener('mouseup', function() {
+      isDragging = false;
     });
 
-    this.svg.addEventListener('mouseup', () => isDragging = false);
-    this.svg.addEventListener('mouseleave', () => isDragging = false);
+    this.svg.addEventListener('mouseleave', function() {
+      isDragging = false;
+    });
   }
 
   zoomIn() {
@@ -181,13 +250,27 @@ class GraphVisualizer {
     const container = this.svg.querySelector('g');
     if (container) {
       container.setAttribute('transform', 
-        `translate(${this.translateX},${this.translateY}) scale(${this.scale})`
-      );
+        `translate(${this.translateX},${this.translateY}) scale(${this.scale})`);
     }
   }
 
   render(history) {
+    console.log('Rendering graph with history:', history);
+    
+    // Clear the SVG
     this.svg.innerHTML = '';
+    
+    if (!history || history.length === 0) {
+      console.log('No history to render');
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', '50%');
+      text.setAttribute('y', '50%');
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('fill', 'white');
+      text.textContent = 'No navigation history yet. Start browsing Wikipedia!';
+      this.svg.appendChild(text);
+      return;
+    }
     
     // Create container group
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -197,6 +280,8 @@ class GraphVisualizer {
     const links = [];
     
     history.forEach(entry => {
+      console.log('Processing entry:', entry);
+      
       if (!nodes.has(entry.from)) {
         nodes.set(entry.from, {
           id: entry.from,
@@ -218,6 +303,9 @@ class GraphVisualizer {
       });
     });
 
+    console.log('Created nodes:', nodes);
+    console.log('Created links:', links);
+
     // Draw links
     links.forEach(link => {
       const linkElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -233,7 +321,6 @@ class GraphVisualizer {
     nodes.forEach(node => {
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       
-      // Create rectangle
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       rect.setAttribute('x', node.x - 80);
       rect.setAttribute('y', node.y - 20);
@@ -243,7 +330,6 @@ class GraphVisualizer {
       rect.setAttribute('class', 'node-box');
       group.appendChild(rect);
       
-      // Create text
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', node.x);
       text.setAttribute('y', node.y);
@@ -251,7 +337,6 @@ class GraphVisualizer {
       text.setAttribute('dominant-baseline', 'middle');
       text.setAttribute('class', 'node-label');
       
-      // Truncate text if needed
       const title = node.id.length > 20 ? node.id.substring(0, 20) + '...' : node.id;
       text.textContent = title;
       
@@ -263,19 +348,27 @@ class GraphVisualizer {
   }
 }
 
-// Initialize visualization
+// Initialize visualization when the document is ready
 document.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM Content Loaded');
+  
   const svg = document.querySelector('#graph svg');
+  console.log('Found SVG element:', svg);
+  
   const visualizer = new GraphVisualizer(svg);
   
   function updateGraph() {
+    console.log('Updating graph');
     chrome.storage.local.get(['navigationHistory'], function(result) {
+      console.log('Retrieved from storage:', result);
       const history = result.navigationHistory || [];
       visualizer.render(history);
     });
   }
   
+  // Set up button event listeners
   document.getElementById('clearHistory').addEventListener('click', function() {
+    console.log('Clearing history');
     chrome.storage.local.set({ navigationHistory: [] }, updateGraph);
   });
   
@@ -291,5 +384,6 @@ document.addEventListener('DOMContentLoaded', function() {
     visualizer.resetView();
   });
   
+  // Initial graph update
   updateGraph();
 });

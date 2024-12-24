@@ -5,28 +5,53 @@ function getWikipediaTitle() {
 
 function trackNavigation(fromTitle) {
   const currentTitle = getWikipediaTitle();
+  console.log('Tracking navigation from', fromTitle, 'to', currentTitle);
+  
   if (currentTitle) {
-    chrome.runtime.sendMessage({
-      type: 'navigation',
+    const navigation = {
       from: fromTitle,
       to: currentTitle,
       timestamp: new Date().toISOString()
+    };
+    
+    chrome.storage.local.get(['navigationHistory'], function(result) {
+      const history = result.navigationHistory || [];
+      history.push(navigation);
+      chrome.storage.local.set({ navigationHistory: history });
+      console.log('Added navigation to history:', navigation);
     });
   }
 }
 
-document.addEventListener('click', (e) => {
-  const link = e.target.closest('a[href*="/wiki/"]');
-  if (link) {
-    const fromTitle = getWikipediaTitle();
-    sessionStorage.setItem('fromTitle', fromTitle);
-  }
-});
+// Capture all types of link activations
+document.addEventListener('click', handleLinkClick, true);
+document.addEventListener('mousedown', handleLinkClick, true);
+document.addEventListener('auxclick', handleLinkClick, true);  // Middle click
 
-window.addEventListener('load', () => {
-  const fromTitle = sessionStorage.getItem('fromTitle');
-  if (fromTitle) {
-    trackNavigation(fromTitle);
-    sessionStorage.removeItem('fromTitle');
+function handleLinkClick(e) {
+  const link = e.target.closest('a[href*="/wiki/"]');
+  if (!link) return;
+
+  // Don't handle right clicks
+  if (e.button === 2) return;
+
+  const fromTitle = getWikipediaTitle();
+  const targetUrl = link.href;
+
+  // Notify background script about this navigation attempt
+  chrome.runtime.sendMessage({
+    type: 'linkClicked',
+    fromTitle: fromTitle,
+    targetUrl: targetUrl
+  });
+
+  console.log('Link clicked:', {fromTitle, targetUrl});
+}
+
+// Listen for navigation completion message from background script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'processNavigation') {
+    trackNavigation(message.fromTitle);
   }
+  return true;
 });

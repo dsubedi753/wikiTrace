@@ -8,11 +8,12 @@ Created on Tue Dec 24 14:55:15 2024
 def split_wiki_trace():
     # Dictionary to store content between markers
     file_contents = {
-        'manifest.json': '',
+        # 'manifest.json': '',
         'content.js': '',
         'background.js': '',
         'popup.html': '',
-        'popup.js': ''
+        'popup.js': '',
+        'styles.css': ''
     }
     
     current_file = None
