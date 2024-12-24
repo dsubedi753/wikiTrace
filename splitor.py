@@ -5,6 +5,8 @@ Created on Tue Dec 24 14:55:15 2024
 @author: Divas
 """
 
+import os 
+
 def split_wiki_trace():
     # Dictionary to store content between markers
     file_contents = {
@@ -49,4 +51,5 @@ def split_wiki_trace():
 
 
 if __name__ == "__main__":
+    os.chdir('D:\Divas\Projects\wikiTrace')
     split_wiki_trace()
