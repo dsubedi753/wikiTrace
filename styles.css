@@ -1,55 +1,79 @@
+/* styles.css */
 body {
-  width: 800px;
-  height: 600px;
-  padding: 20px;
-  margin: 0;
-  background: #000000;
-  font-family: system-ui, -apple-system, sans-serif;
-  color: white;
+    width: 800px;
+    height: 600px;
+    margin: 0;
+    padding: 16px;
+    background: #000000;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: white;
+    display: flex;
+    flex-direction: column;
 }
 
-#graph {
-  width: 100%;
-  height: 500px;
-  border: 1px solid #333;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #000000;
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 18px;
 }
 
 .controls {
-  margin: 10px 0;
-  display: flex;
-  gap: 10px;
+    display: flex;
+    gap: 8px;
 }
 
 button {
-  padding: 8px 16px;
-  background: #1a1a1a;
-  color: #ffffff;
-  border: 1px solid #333;
-  border-radius: 4px;
-  cursor: pointer;
+    padding: 8px 16px;
+    background: #1a1a1a;
+    color: #ffffff;
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
 }
 
 button:hover {
-  background: #2a2a2a;
+    background: #2a2a2a;
+}
+
+#graph {
+    flex: 1;
+    border: 1px solid #333;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #000000;
+    position: relative;
+}
+
+#graph svg {
+    width: 100%;
+    height: 100%;
 }
 
 .node-box {
-  fill: #1a1a1a;
-  stroke: #4488ff;
-  stroke-width: 2;
+    fill: #1a1a1a;
+    stroke: #4488ff;
+    stroke-width: 2;
 }
 
 .node-label {
-  fill: white;
-  font-size: 12px;
-  font-weight: 500;
+    fill: white;
+    font-size: 12px;
+    font-weight: 500;
 }
 
 .link {
-  stroke: #4488ff;
-  stroke-width: 1.5;
-  fill: none;
+    stroke: #4488ff;
+    stroke-width: 1.5;
+    fill: none;
+}
+
+.empty-message {
+    fill: #666;
+    font-size: 14px;
 }

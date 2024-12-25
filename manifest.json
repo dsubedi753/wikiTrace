@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Wikipedia Navigation Visualizer",
+  "name": "Wikipedia Navigation Tree",
   "version": "1.0",
   "description": "Tracks and visualizes your Wikipedia browsing history as a tree",
   "permissions": ["storage", "tabs"],
