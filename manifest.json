@@ -2,15 +2,9 @@
   "manifest_version": 3,
   "name": "Wikipedia Navigation Visualizer",
   "version": "1.0",
-  "description": "Tracks and visualizes your Wikipedia browsing history as a graph",
-  "permissions": [
-    "storage",
-    "tabs",
-    "webNavigation"
-  ],
-  "host_permissions": [
-    "*://*.wikipedia.org/*"
-  ],
+  "description": "Tracks and visualizes your Wikipedia browsing history as a tree",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["*://*.wikipedia.org/*"],
   "action": {
     "default_popup": "popup.html"
   },
@@ -19,7 +13,6 @@
     "js": ["content.js"]
   }],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   }
 }

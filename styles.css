@@ -51,4 +51,5 @@ button:hover {
 .link {
   stroke: #4488ff;
   stroke-width: 1.5;
+  fill: none;
 }
