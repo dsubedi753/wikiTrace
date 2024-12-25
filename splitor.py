@@ -10,7 +10,7 @@ import os
 def split_wiki_trace():
     # Dictionary to store content between markers
     file_contents = {
-        # 'manifest.json': '',
+        'manifest.json': '',
         'content.js': '',
         'background.js': '',
         'popup.html': '',
@@ -39,10 +39,11 @@ def split_wiki_trace():
     
         # Write content to separate files
         for filename, content in file_contents.items():
-            with open(filename, 'w', encoding='utf-8') as output_file:
-                # Remove trailing whitespace but keep content formatting
-                output_file.write(content.rstrip())
-            print(f"Created: {filename}")
+            if not(content == ''):
+                with open(filename, 'w', encoding='utf-8') as output_file:
+                    # Remove trailing whitespace but keep content formatting
+                    output_file.write(content.rstrip())
+                print(f"Created: {filename}")
             
     except FileNotFoundError:
         print("Error: wikiTrace.txt not found")

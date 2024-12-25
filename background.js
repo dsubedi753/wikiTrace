@@ -1,32 +1,18 @@
-let pendingNavigations = new Map();
+console.log('Background script loaded');
 
-// Listen for all navigation types
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'linkClicked') {
-    const fromTitle = message.fromTitle;
-    const targetUrl = message.targetUrl;
-    
-    // Store this navigation attempt
-    pendingNavigations.set(targetUrl, {
-      fromTitle: fromTitle,
-      timestamp: Date.now()
-    });
-    
-    console.log('Stored pending navigation:', {fromTitle, targetUrl});
-  }
-  return true;
+chrome.runtime.onInstalled.addListener(function() {
+  console.log('Extension installed');
+  // Initialize empty history
+  chrome.storage.local.set({ navigationHistory: [] });
 });
 
-// Listen for navigation completion
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && tab.url.includes('wikipedia.org/wiki/')) {
-    const pending = pendingNavigations.get(tab.url);
-    if (pending && (Date.now() - pending.timestamp) < 10000) {
-      chrome.tabs.sendMessage(tabId, {
-        type: 'processNavigation',
-        fromTitle: pending.fromTitle
-      });
-      pendingNavigations.delete(tab.url);
-    }
+// Listen for navigation events
+chrome.webNavigation.onCompleted.addListener(function(details) {
+  if (details.url.includes('wikipedia.org/wiki/')) {
+    console.log('Navigation completed:', details.url);
   }
+}, {
+  url: [{
+    hostContains: '.wikipedia.org'
+  }]
 });

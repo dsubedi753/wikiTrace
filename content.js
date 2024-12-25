@@ -1,57 +1,48 @@
+console.log('Content script loaded on Wikipedia page');
+
 function getWikipediaTitle() {
   const titleElement = document.getElementById('firstHeading');
-  return titleElement ? titleElement.textContent.trim() : null;
+  const title = titleElement ? titleElement.textContent.trim() : null;
+  console.log('Current Wikipedia page title:', title);
+  return title;
 }
 
-function trackNavigation(fromTitle) {
-  const currentTitle = getWikipediaTitle();
-  console.log('Tracking navigation from', fromTitle, 'to', currentTitle);
-  
-  if (currentTitle) {
-    const navigation = {
-      from: fromTitle,
-      to: currentTitle,
-      timestamp: new Date().toISOString()
-    };
-    
-    chrome.storage.local.get(['navigationHistory'], function(result) {
-      const history = result.navigationHistory || [];
-      history.push(navigation);
-      chrome.storage.local.set({ navigationHistory: history });
-      console.log('Added navigation to history:', navigation);
-    });
-  }
-}
-
-// Capture all types of link activations
-document.addEventListener('click', handleLinkClick, true);
-document.addEventListener('mousedown', handleLinkClick, true);
-document.addEventListener('auxclick', handleLinkClick, true);  // Middle click
-
-function handleLinkClick(e) {
+// Track clicks on Wikipedia links
+document.addEventListener('click', function(e) {
   const link = e.target.closest('a[href*="/wiki/"]');
   if (!link) return;
 
-  // Don't handle right clicks
-  if (e.button === 2) return;
-
   const fromTitle = getWikipediaTitle();
-  const targetUrl = link.href;
+  console.log('Wikipedia link clicked:', { fromTitle, targetUrl: link.href });
 
-  // Notify background script about this navigation attempt
-  chrome.runtime.sendMessage({
-    type: 'linkClicked',
-    fromTitle: fromTitle,
-    targetUrl: targetUrl
+  chrome.storage.local.get(['navigationHistory'], function(result) {
+    const history = result.navigationHistory || [];
+    const navigation = {
+      from: fromTitle,
+      to: link.title || link.textContent.trim(),
+      timestamp: new Date().toISOString()
+    };
+    history.push(navigation);
+    console.log('Adding navigation to history:', navigation);
+    console.log('New history length:', history.length);
+
+    chrome.storage.local.set({ navigationHistory: history }, function() {
+      console.log('Navigation history saved successfully');
+    });
   });
+});
 
-  console.log('Link clicked:', {fromTitle, targetUrl});
-}
+// Log initial page load
+window.addEventListener('load', function() {
+  console.log('Wikipedia page loaded, checking storage...');
+  chrome.storage.local.get(['navigationHistory'], function(result) {
+    console.log('Current navigation history:', result.navigationHistory);
+  });
+});
 
-// Listen for navigation completion message from background script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'processNavigation') {
-    trackNavigation(message.fromTitle);
+// Listen for storage changes
+chrome.storage.onChanged.addListener(function(changes, namespace) {
+  if (changes.navigationHistory) {
+    console.log('Navigation history updated:', changes.navigationHistory.newValue);
   }
-  return true;
 });

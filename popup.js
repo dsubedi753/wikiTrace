@@ -1,10 +1,62 @@
+
+console.log('Popup script starting...');
+
+// Test storage access
+chrome.storage.local.get(['navigationHistory'], function(result) {
+    console.log('Current storage:', result);
+});
+
+
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('Popup opened');
+  
+  const svg = document.querySelector('#graph svg');
+  console.log('SVG element:', svg);
+  
+  const visualizer = new GraphVisualizer(svg);
+  
+  function updateGraph() {
+    console.log('Fetching navigation history...');
+    chrome.storage.local.get(['navigationHistory'], function(result) {
+      console.log('Retrieved history:', result);
+      const history = result.navigationHistory || [];
+      if (history.length === 0) {
+        console.log('No navigation history found');
+      } else {
+        console.log('Found history with', history.length, 'entries');
+      }
+      visualizer.render(history);
+    });
+  }
+  
+  document.getElementById('clearHistory').addEventListener('click', function() {
+    console.log('Clearing history');
+    chrome.storage.local.set({ navigationHistory: [] }, updateGraph);
+  });
+  
+  document.getElementById('zoomIn').addEventListener('click', function() {
+    visualizer.zoomIn();
+  });
+  
+  document.getElementById('zoomOut').addEventListener('click', function() {
+    visualizer.zoomOut();
+  });
+  
+  document.getElementById('resetView').addEventListener('click', function() {
+    visualizer.resetView();
+  });
+  
+  updateGraph();
+});
+
 class GraphVisualizer {
   constructor(svgElement) {
-    console.log('Initializing GraphVisualizer');
     this.svg = svgElement;
     this.scale = 1;
     this.translateX = 0;
     this.translateY = 0;
+    this.width = this.svg.clientWidth || 800;
+    this.height = this.svg.clientHeight || 500;
     this.setupZoom();
   }
 
@@ -35,6 +87,14 @@ class GraphVisualizer {
     });
   }
 
+  updateTransform() {
+    const container = this.svg.querySelector('g');
+    if (container) {
+      container.setAttribute('transform', 
+        `translate(${this.translateX},${this.translateY}) scale(${this.scale})`);
+    }
+  }
+
   zoomIn() {
     this.scale *= 1.2;
     this.updateTransform();
@@ -52,22 +112,23 @@ class GraphVisualizer {
     this.updateTransform();
   }
 
-  updateTransform() {
-    const container = this.svg.querySelector('g');
-    if (container) {
-      container.setAttribute('transform', 
-        `translate(${this.translateX},${this.translateY}) scale(${this.scale})`);
-    }
+  layoutNodes(nodes) {
+    const verticalPadding = 50;
+    const horizontalCenter = this.width / 2;
+    const availableHeight = this.height - (2 * verticalPadding);
+    const verticalSpacing = availableHeight / (nodes.length + 1);
+
+    nodes.forEach((node, index) => {
+      node.x = horizontalCenter;
+      node.y = verticalPadding + (index * verticalSpacing);
+    });
   }
 
   render(history) {
-    console.log('Rendering graph with history:', history);
-    
-    // Clear the SVG
+    console.log('Rendering history:', history);
     this.svg.innerHTML = '';
     
     if (!history || history.length === 0) {
-      console.log('No history to render');
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', '50%');
       text.setAttribute('y', '50%');
@@ -77,55 +138,66 @@ class GraphVisualizer {
       this.svg.appendChild(text);
       return;
     }
-    
+
     // Create container group
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    
-    // Create nodes and links from history
-    const nodes = new Map();
+    this.svg.appendChild(container);
+
+    // Process nodes and links
+    const nodesMap = new Map();
+    const nodes = [];
     const links = [];
-    
+
+    // First, collect all unique nodes in order of appearance
     history.forEach(entry => {
-      console.log('Processing entry:', entry);
-      
-      if (!nodes.has(entry.from)) {
-        nodes.set(entry.from, {
-          id: entry.from,
-          x: Math.random() * 600 + 100,
-          y: Math.random() * 400 + 100
-        });
+      if (!nodesMap.has(entry.from)) {
+        const node = { id: entry.from };
+        nodesMap.set(entry.from, node);
+        nodes.push(node);
       }
-      if (!nodes.has(entry.to)) {
-        nodes.set(entry.to, {
-          id: entry.to,
-          x: Math.random() * 600 + 100,
-          y: Math.random() * 400 + 100
-        });
+      if (!nodesMap.has(entry.to)) {
+        const node = { id: entry.to };
+        nodesMap.set(entry.to, node);
+        nodes.push(node);
       }
-      
+    });
+
+    // Layout nodes vertically
+    this.layoutNodes(nodes);
+
+    // Create links
+    history.forEach(entry => {
       links.push({
-        source: nodes.get(entry.from),
-        target: nodes.get(entry.to)
+        source: nodesMap.get(entry.from),
+        target: nodesMap.get(entry.to)
       });
     });
 
-    console.log('Created nodes:', nodes);
-    console.log('Created links:', links);
-
     // Draw links
     links.forEach(link => {
-      const linkElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      linkElement.setAttribute('x1', link.source.x);
-      linkElement.setAttribute('y1', link.source.y);
-      linkElement.setAttribute('x2', link.target.x);
-      linkElement.setAttribute('y2', link.target.y);
-      linkElement.setAttribute('class', 'link');
-      container.appendChild(linkElement);
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('class', 'link');
+      path.setAttribute('fill', 'none');
+
+      // Calculate path
+      const dx = link.target.x - link.source.x;
+      const dy = link.target.y - link.source.y;
+      if (Math.abs(dy) > 60) {
+        // Use curved line for non-adjacent nodes
+        const dr = Math.sqrt(dx * dx + dy * dy) * 1.5;
+        path.setAttribute('d', `M${link.source.x},${link.source.y} A${dr},${dr} 0 0,1 ${link.target.x},${link.target.y}`);
+      } else {
+        // Use straight line for adjacent nodes
+        path.setAttribute('d', `M${link.source.x},${link.source.y} L${link.target.x},${link.target.y}`);
+      }
+
+      container.appendChild(path);
     });
 
     // Draw nodes
     nodes.forEach(node => {
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      group.setAttribute('class', 'node-group');
       
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
       rect.setAttribute('x', node.x - 80);
@@ -134,7 +206,6 @@ class GraphVisualizer {
       rect.setAttribute('height', 40);
       rect.setAttribute('rx', 5);
       rect.setAttribute('class', 'node-box');
-      group.appendChild(rect);
       
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', node.x);
@@ -146,11 +217,10 @@ class GraphVisualizer {
       const title = node.id.length > 20 ? node.id.substring(0, 20) + '...' : node.id;
       text.textContent = title;
       
+      group.appendChild(rect);
       group.appendChild(text);
       container.appendChild(group);
     });
-
-    this.svg.appendChild(container);
   }
 }
 
